@@ -20,14 +20,24 @@ class RedeemCash(val amount: Amount<Currency>, val issuer: Party) : AbstractRede
 
     companion object {
         object REDEEMING : ProgressTracker.Step("Redeeming cash.")
+        object SEND_CASH_STATES : ProgressTracker.Step("Send cash states to issuer.")
+        object SEND_AMOUNT: ProgressTracker.Step("Send amount to issuer.")
+        object RECEIVE_FINALITY: ProgressTracker.Step("Receive finality transaction.")
+
         @JvmStatic
-        fun tracker() = ProgressTracker(REDEEMING)
+        fun tracker() = ProgressTracker(
+                REDEEMING,
+                SEND_CASH_STATES,
+                SEND_AMOUNT,
+                RECEIVE_FINALITY
+        )
     }
 
     override val progressTracker: ProgressTracker = tracker()
 
     @Suspendable
     override fun call(): SignedTransaction {
+        logger.info("Starting RedeemCash flow...")
         val builder = TransactionBuilder(notary = null)
         //get unconsumed cash states
         val exitStates = AbstractCashSelection
@@ -40,14 +50,17 @@ class RedeemCash(val amount: Amount<Currency>, val issuer: Party) : AbstractRede
         logger.info("Sending states to exit to $issuer")
 
         //sign tx
+        progressTracker.currentStep = SEND_CASH_STATES
         subFlow(SendStateAndRefFlow(otherSession, exitStates))
 
+        progressTracker.currentStep = SEND_AMOUNT
         otherSession.send(amount.issuedBy(PartyAndReference(issuer, OpaqueBytes.of(0))))
 
         subFlow(object : SignTransactionFlow(otherSession) {
             override fun checkTransaction(stx: SignedTransaction) = Unit
         })
 
+        progressTracker.currentStep = RECEIVE_FINALITY
         return subFlow(ReceiveFinalityFlow(otherSession))
     }
 }

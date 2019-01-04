@@ -25,13 +25,18 @@ import java.time.Instant
 class AddNostroTransactions(val newNostroTransactions: List<NostroTransaction>) : FlowLogic<Map<String, Instant>>() {
 
     companion object {
-        // TODO: Add the rest of the progress tracker.
-        object FINALISING : ProgressTracker.Step("Finalising transaction.") {
+        object GENERATING_TX : ProgressTracker.Step("Generating node transaction")
+        object SIGNING_TX : ProgressTracker.Step("Signing node transaction")
+        object FINALISING_TX : ProgressTracker.Step("Obtaining notary signature and recording node transaction") {
             override fun childProgressTracker() = FinalityFlow.tracker()
         }
 
         @JvmStatic
-        fun tracker() = ProgressTracker(FINALISING)
+        fun tracker() = ProgressTracker(
+                GENERATING_TX,
+                SIGNING_TX,
+                FINALISING_TX
+        )
     }
 
     override val progressTracker: ProgressTracker = tracker()
@@ -62,6 +67,7 @@ class AddNostroTransactions(val newNostroTransactions: List<NostroTransaction>) 
         val nostroTransactionStates = transactionsToRecord.map { it.toState(ourIdentity) }
 
         // Now, commit the nostro transaction records to the ledger. It's only the issuer that sees this though.
+        progressTracker.currentStep = GENERATING_TX
         val notary = serviceHub.networkMapCache.notaryIdentities.first()
         // It's always the issuer that signs.
         val command = Command(NostroTransactionContract.Add(), listOf(ourIdentity.owningKey))
@@ -72,9 +78,10 @@ class AddNostroTransactions(val newNostroTransactions: List<NostroTransaction>) 
             unsignedTransaction.addOutputState(it, NostroTransactionContract.CONTRACT_ID)
         }
 
+        progressTracker.currentStep = SIGNING_TX
         val signedTransaction = serviceHub.signInitialTransaction(unsignedTransaction)
-        progressTracker.currentStep = FINALISING
-        val finalisedTransaction = subFlow(FinalityFlow(signedTransaction, emptySet<FlowSession>(), FINALISING.childProgressTracker()))
+        progressTracker.currentStep = FINALISING_TX
+        val finalisedTransaction = subFlow(FinalityFlow(signedTransaction, emptySet<FlowSession>(), FINALISING_TX.childProgressTracker()))
 
         // The flow returns the IDs and timestamps of the last updates for each nostro account so
         // the daemon knows what has been recorded to date.

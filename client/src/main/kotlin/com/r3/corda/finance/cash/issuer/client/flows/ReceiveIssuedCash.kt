@@ -12,7 +12,7 @@ class ReceiveIssuedCash(val otherSession: FlowSession) : FlowLogic<Unit>() {
     @Suspendable
     override fun call() {
         logger.info("Starting ReceiveIssuedCash flow...")
-        //return subFlow(ReceiveTransactionFlow(otherSession, true, StatesToRecord.ALL_VISIBLE))
+
         if (!serviceHub.myInfo.isLegalIdentity(otherSession.counterparty)) {
             subFlow(ReceiveFinalityFlow(otherSession))
         }

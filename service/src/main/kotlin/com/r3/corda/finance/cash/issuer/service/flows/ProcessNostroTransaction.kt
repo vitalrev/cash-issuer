@@ -18,6 +18,7 @@ import net.corda.core.contracts.StateAndRef
 import net.corda.core.flows.*
 import net.corda.core.transactions.SignedTransaction
 import net.corda.core.transactions.TransactionBuilder
+import net.corda.core.utilities.ProgressTracker
 import java.time.Instant
 
 // TODO: What about segregation of duties? Typically, something like an issuance event would require multiple sign-offs.
@@ -33,12 +34,34 @@ import java.time.Instant
 @InitiatingFlow
 class ProcessNostroTransaction(val stateAndRef: StateAndRef<NostroTransactionState>) : FlowLogic<SignedTransaction>() {
 
+    companion object {
+        object GENERATING_TX : ProgressTracker.Step("Generating transaction")
+        object UPDATE_NOSTRO_TX : ProgressTracker.Step("Update nostro transaction")
+        object ADD_NODE_TX : ProgressTracker.Step("Add node transaction")
+        object SIGNING_TX : ProgressTracker.Step("Signing transaction")
+        object FINALISING_TX : ProgressTracker.Step("Obtaining notary signature and recording transaction") {
+            override fun childProgressTracker() = FinalityFlow.tracker()
+        }
+
+        @JvmStatic
+        fun tracker() = ProgressTracker(
+                GENERATING_TX,
+                UPDATE_NOSTRO_TX,
+                ADD_NODE_TX,
+                SIGNING_TX,
+                FINALISING_TX
+        )
+    }
+
+    override val progressTracker: ProgressTracker = tracker()
+
     /**
      * Updates the status of the nostro transaction state. Doesn't add anything else. No return type as the builder is
      * mutable.
      */
     @Suspendable
-    private fun createBaseTransaction(builder: TransactionBuilder, newType: NostroTransactionType, newStatus: NostroTransactionStatus) {
+    private fun updateNostroTransaction(builder: TransactionBuilder, newType: NostroTransactionType, newStatus: NostroTransactionStatus) {
+        progressTracker.currentStep = UPDATE_NOSTRO_TX
         val command = Command(NostroTransactionContract.Match(), listOf(ourIdentity.owningKey))
         val nostroTransactionOutput = stateAndRef.state.data.copy(type = newType, status = newStatus)
         builder
@@ -54,6 +77,7 @@ class ProcessNostroTransaction(val stateAndRef: StateAndRef<NostroTransactionSta
             nostroTransactionState: NostroTransactionState,
             isRedemption: Boolean = false
     ) {
+        progressTracker.currentStep = ADD_NODE_TX
         // The original issuance details.
         val counterparty = bankAccountStates.single { it.state.data.owner != ourIdentity }.state.data.owner
         val issuanceAmount = nostroTransactionState.amountTransfer
@@ -84,7 +108,7 @@ class ProcessNostroTransaction(val stateAndRef: StateAndRef<NostroTransactionSta
 
     @Suspendable
     override fun call(): SignedTransaction {
-        logger.info("Starting ProcessNostroTransaction flow.")
+        logger.info("Starting ProcessNostroTransaction flow...")
         // For brevity.
         val nostroTransaction = stateAndRef.state.data
         val amountTransfer = nostroTransaction.amountTransfer
@@ -97,6 +121,7 @@ class ProcessNostroTransaction(val stateAndRef: StateAndRef<NostroTransactionSta
             } else null
         }.filterNotNull()
 
+        progressTracker.currentStep = GENERATING_TX
         // Set up our transaction builder.
         val notary = serviceHub.networkMapCache.notaryIdentities.first()
         val builder = TransactionBuilder(notary = notary)
@@ -138,22 +163,22 @@ class ProcessNostroTransaction(val stateAndRef: StateAndRef<NostroTransactionSta
             areNoMatches -> throw FlowException("We should always, at least, have our bank account data recorded.")
             isDoubleMatchInternalTransfer -> {
                 logger.info("The nostro transaction is an internal transfer.")
-                createBaseTransaction(builder, NostroTransactionType.COLLATERAL_TRANSFER, NostroTransactionStatus.MATCHED)
+                updateNostroTransaction(builder, NostroTransactionType.COLLATERAL_TRANSFER, NostroTransactionStatus.MATCHED)
             }
             issuerMatchOnly -> {
                 logger.info("We don't have the counterparty's bank account details.")
                 logger.info("We'll have to keep this cash safe until we figure out who sent it to us.")
                 val type = if (isIssuance) NostroTransactionType.ISSUANCE else NostroTransactionType.REDEMPTION
-                createBaseTransaction(builder, type, NostroTransactionStatus.MATCHED_ISSUER)
+                updateNostroTransaction(builder, type, NostroTransactionStatus.MATCHED_ISSUER)
             }
             isIssuance -> {
-                createBaseTransaction(builder, NostroTransactionType.ISSUANCE, NostroTransactionStatus.MATCHED)
+                updateNostroTransaction(builder, NostroTransactionType.ISSUANCE, NostroTransactionStatus.MATCHED)
                 addNodeTransactionState(builder, bankAccountStateRefs, nostroTransaction, isRedemption)
                 // TODO: Check that accounts are verified.
                 logger.info("This is an issuance!")
             }
             isRedemption -> {
-                createBaseTransaction(builder, NostroTransactionType.REDEMPTION, NostroTransactionStatus.MATCHED)
+                updateNostroTransaction(builder, NostroTransactionType.REDEMPTION, NostroTransactionStatus.MATCHED)
                 // TODO: Hack alert!!! (Need to do some more thinking around this re: "start from date").
                 // Need to work out how we deal with backup restores or processing nostro transactinos which have
                 // already been processed after a database backup restore. Currently, I'm just re-creating the pending
@@ -167,8 +192,11 @@ class ProcessNostroTransaction(val stateAndRef: StateAndRef<NostroTransactionSta
             else -> throw FlowException("Something went wrong. Someone is going to be in trouble...!")
         }
 
+        progressTracker.currentStep = SIGNING_TX
         val stx = serviceHub.signInitialTransaction(builder)
-        return subFlow(FinalityFlow(stx, emptySet<FlowSession>()))
+
+        progressTracker.currentStep = FINALISING_TX
+        return subFlow(FinalityFlow(stx, emptySet<FlowSession>(), FINALISING_TX.childProgressTracker()))
     }
 
 }

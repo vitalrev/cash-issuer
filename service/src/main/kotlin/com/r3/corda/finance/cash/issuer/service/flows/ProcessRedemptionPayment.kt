@@ -12,11 +12,30 @@ import net.corda.core.flows.FlowSession
 import net.corda.core.flows.StartableByService
 import net.corda.core.transactions.SignedTransaction
 import net.corda.core.transactions.TransactionBuilder
+import net.corda.core.utilities.ProgressTracker
 
 @StartableByService
 class ProcessRedemptionPayment(val signedTransaction: SignedTransaction) : FlowLogic<Unit>() {
+    companion object {
+        object GENERATING_TX : ProgressTracker.Step("Generating node transaction")
+        object SIGNING_TX : ProgressTracker.Step("Signing node transaction")
+        object FINALISING_TX : ProgressTracker.Step("Obtaining notary signature and recording node transaction") {
+            override fun childProgressTracker() = FinalityFlow.tracker()
+        }
+
+        @JvmStatic
+        fun tracker() = ProgressTracker(
+                GENERATING_TX,
+                SIGNING_TX,
+                FINALISING_TX
+        )
+    }
+
+    override val progressTracker = tracker()
+
     @Suspendable
     override fun call() {
+        logger.info("Starting ProcessRedemptionPayment flow...")
         val counterparty = signedTransaction.tx.toLedgerTransaction(serviceHub).referenceInputRefsOfType<BankAccountState>().single {
             it.state.data.owner != ourIdentity
         }.state.data.owner
@@ -32,6 +51,8 @@ class ProcessRedemptionPayment(val signedTransaction: SignedTransaction) : FlowL
         logger.info("Total redemption amount pending is $totalRedemptionAmountPending. Tx amount is $transactionAmount")
         logger.info("Total redemption payments")
         require(totalRedemptionAmountPending == transactionAmount) { "The payment must equal the redemption amount requested." }
+
+        progressTracker.currentStep = GENERATING_TX
         val notary = serviceHub.networkMapCache.notaryIdentities.first()
         val transactionBuilder = TransactionBuilder(notary = notary)
         transactionBuilder
@@ -39,8 +60,12 @@ class ProcessRedemptionPayment(val signedTransaction: SignedTransaction) : FlowL
                 .addOutputState(pendingRedemption.state.data.copy(status = NodeTransactionStatus.COMPLETE), NodeTransactionContract.CONTRACT_ID)
                 .addReferenceState(signedTransaction.tx.outRefsOfType<NostroTransactionState>().single().referenced())
                 .addCommand(NodeTransactionContract.Update(), listOf(ourIdentity.owningKey))
+
+        progressTracker.currentStep = SIGNING_TX
         val stx = serviceHub.signInitialTransaction(transactionBuilder)
-        subFlow(FinalityFlow(stx, emptySet<FlowSession>()))
+
+        progressTracker.currentStep = FINALISING_TX
+        subFlow(FinalityFlow(stx, emptySet<FlowSession>(), FINALISING_TX.childProgressTracker()))
         logger.info(stx.tx.toString())
     }
 }

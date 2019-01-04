@@ -33,6 +33,7 @@ class MoveCash(val recipient: Party, val amount: Amount<Currency>) : FlowLogic<S
 
     @Suspendable
     override fun call(): SignedTransaction {
+        logger.info("Starting MoveCash flow...")
         val notary = serviceHub.networkMapCache.notaryIdentities.first()
         val transactionBuilder = TransactionBuilder(notary = notary)
         val (_, keys) = try {

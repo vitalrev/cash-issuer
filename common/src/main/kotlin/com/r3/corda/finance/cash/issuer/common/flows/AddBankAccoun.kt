@@ -21,13 +21,29 @@ import net.corda.core.utilities.ProgressTracker
 @StartableByService
 @InitiatingFlow
 class AddBankAccount(val bankAccount: BankAccount, val verifier: Party) : FlowLogic<SignedTransaction>() {
-
     companion object {
-        // TODO: Add the rest of the progress tracker.
-        object FINALISING : ProgressTracker.Step("Finalising transaction.")
+        object TX_BUILDING : ProgressTracker.Step("Building a transaction.")
+        object TX_SIGNING : ProgressTracker.Step("Signing a transaction.")
+        object TX_VERIFICATION : ProgressTracker.Step("Verifying a transaction.")
+        object SIGS_GATHERING : ProgressTracker.Step("Gathering a transaction's signatures.") {
+            // Wiring up a child progress tracker allows us to see the
+            // subflow's progress steps in our flow's progress tracker.
+            override fun childProgressTracker() = CollectSignaturesFlow.tracker()
+        }
 
-        @JvmStatic
-        fun tracker() = ProgressTracker(FINALISING)
+        object VERIFYING_SIGS : ProgressTracker.Step("Verifying a transaction's signatures.")
+        object FINALISATION : ProgressTracker.Step("Finalising a transaction.") {
+            override fun childProgressTracker() = FinalityFlow.tracker()
+        }
+
+        fun tracker() = ProgressTracker(
+                TX_BUILDING,
+                TX_SIGNING,
+                TX_VERIFICATION,
+                SIGS_GATHERING,
+                VERIFYING_SIGS,
+                FINALISATION
+        )
     }
 
     override val progressTracker: ProgressTracker = tracker()
@@ -46,6 +62,7 @@ class AddBankAccount(val bankAccount: BankAccount, val verifier: Party) : FlowLo
         }
 
         logger.info("No state for $bankAccount. Adding it.")
+        progressTracker.currentStep = TX_BUILDING
         val bankAccountState = bankAccount.toState(ourIdentity, verifier)
         val notary = serviceHub.networkMapCache.notaryIdentities.first()
         val verifierSsession = initiateFlow(bankAccountState.verifier)
@@ -55,12 +72,22 @@ class AddBankAccount(val bankAccount: BankAccount, val verifier: Party) : FlowLo
         val outputStateAndContract = StateAndContract(bankAccountState, BankAccountContract.CONTRACT_ID)
         val unsignedTransaction = TransactionBuilder(notary = notary).withItems(command, outputStateAndContract)
 
-        val signedTransaction = serviceHub.signInitialTransaction(unsignedTransaction)
+        progressTracker.currentStep = TX_SIGNING
+        val partiallySignedTransaction = serviceHub.signInitialTransaction(unsignedTransaction)
 
-        progressTracker.currentStep = FINALISING
-        // Share the added bank account state with the verifier/issuer.
+        progressTracker.currentStep = TX_VERIFICATION
+        partiallySignedTransaction.verify(serviceHub)
+
+        progressTracker.currentStep = SIGS_GATHERING
         val sessionsForFinality = if (serviceHub.myInfo.isLegalIdentity(bankAccountState.verifier)) emptyList() else listOf(verifierSsession)
-        return subFlow(FinalityFlow(signedTransaction, sessionsForFinality))
+        val fullySignedTx = subFlow(CollectSignaturesFlow(partiallySignedTransaction, sessionsForFinality, SIGS_GATHERING.childProgressTracker()))
+
+        progressTracker.currentStep = VERIFYING_SIGS
+        fullySignedTx.verifyRequiredSignatures()
+
+        progressTracker.currentStep = FINALISATION
+        // Share the added bank account state with the verifier/issuer.
+        return subFlow(FinalityFlow(fullySignedTx, sessionsForFinality, FINALISATION.childProgressTracker()))
     }
 
 }

@@ -46,6 +46,7 @@ class IssueCash(val stx: SignedTransaction) : FlowLogic<Pair<SignedTransaction, 
     override val progressTracker = tracker()
     @Suspendable
     override fun call(): Pair<SignedTransaction, SignedTransaction> {
+        logger.info("Starting IssueCash flow...")
         // Our chosen notary.
         val notary = serviceHub.networkMapCache.notaryIdentities.first()
         val nodeTransactionStateAndRef = stx.tx.outRefsOfType<NodeTransactionState>().single()

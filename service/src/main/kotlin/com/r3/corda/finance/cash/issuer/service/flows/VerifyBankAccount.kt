@@ -12,6 +12,7 @@ import net.corda.core.flows.StartableByRPC
 import net.corda.core.flows.StartableByService
 import net.corda.core.transactions.SignedTransaction
 import net.corda.core.transactions.TransactionBuilder
+import net.corda.core.utilities.ProgressTracker
 
 /**
  * For now accounts must be looked-up via account number.
@@ -21,9 +22,26 @@ import net.corda.core.transactions.TransactionBuilder
 @StartableByRPC
 class VerifyBankAccount(val linearId: UniqueIdentifier) : AbstractVerifyBankAccount() {
 
+    companion object {
+        object GENERATING_TX : ProgressTracker.Step("Generating transaction")
+        object SIGNING_TX : ProgressTracker.Step("Signing transaction")
+        object FINALISING_TX : ProgressTracker.Step("Obtaining notary signature and recording transaction") {
+            override fun childProgressTracker() = FinalityFlow.tracker()
+        }
+
+        @JvmStatic
+        fun tracker() = ProgressTracker(
+                GENERATING_TX,
+                SIGNING_TX,
+                FINALISING_TX
+        )
+    }
+
+    override val progressTracker: ProgressTracker = tracker()
+
     @Suspendable
     override fun call(): SignedTransaction {
-        logger.info("Starting VerifyBankAccount flow.")
+        logger.info("Starting VerifyBankAccount flow...")
 
         val notary = serviceHub.networkMapCache.notaryIdentities.first()
         val bankAccountStateAndRef = getBankAccountStateByLinearId(linearId, serviceHub)
@@ -38,6 +56,7 @@ class VerifyBankAccount(val linearId: UniqueIdentifier) : AbstractVerifyBankAcco
         val ownerSsession = initiateFlow(bankAccountState.owner)
 
         logger.info("Updating verified flag for ${bankAccountState.accountNumber}.")
+        progressTracker.currentStep = GENERATING_TX
         val updatedBankAccountState = bankAccountState.copy(verified = true)
         val command = Command(BankAccountContract.Update(), listOf(ourIdentity.owningKey))
         val utx = TransactionBuilder(notary = notary)
@@ -45,11 +64,13 @@ class VerifyBankAccount(val linearId: UniqueIdentifier) : AbstractVerifyBankAcco
                 .addCommand(command)
                 .addOutputState(updatedBankAccountState, BankAccountContract.CONTRACT_ID)
 
+        progressTracker.currentStep = SIGNING_TX
         val stx = serviceHub.signInitialTransaction(utx)
 
         // Share the updated bank account state with the owner.
+        progressTracker.currentStep = FINALISING_TX
         val sessionsForFinality = if (serviceHub.myInfo.isLegalIdentity(bankAccountState.owner)) emptyList() else listOf(ownerSsession)
-        return subFlow(FinalityFlow(stx, sessionsForFinality))
+        return subFlow(FinalityFlow(stx, sessionsForFinality, FINALISING_TX.childProgressTracker()))
     }
 
 }

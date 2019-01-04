@@ -23,6 +23,7 @@ class IssueCashInternal(val recipient: Party,
                         override val progressTracker: ProgressTracker) : AbstractIssueCash<AbstractCashFlow.Result>(progressTracker) {
     @Suspendable
     override fun call(): AbstractCashFlow.Result {
+        logger.info("Starting IssueCashInternal flow...")
         progressTracker.currentStep = GENERATING_ID
         val recipientSession = initiateFlow(recipient)
         val notary = serviceHub.networkMapCache.notaryIdentities.first()
@@ -35,12 +36,17 @@ class IssueCashInternal(val recipient: Party,
 
         progressTracker.currentStep = SIGNING_TX
         logger.info("Signing transaction for: ${builder.lockId}")
-        val tx = serviceHub.signInitialTransaction(builder, signers)
+        val partiallySignedTransaction = serviceHub.signInitialTransaction(builder, signers)
+
+        partiallySignedTransaction.verify(serviceHub)
+
+        val fullySignedTx = subFlow(CollectSignaturesFlow(partiallySignedTransaction, listOf(recipientSession)))
+
+        fullySignedTx.verifyRequiredSignatures()
 
         progressTracker.currentStep = FINALISING_TX
-        logger.info("Finalising transaction for: ${tx.id}")
-        val sessionsForFinality = if (serviceHub.myInfo.isLegalIdentity(recipient)) emptyList() else listOf(recipientSession)
-        val notarisedTx = finaliseTx(tx, sessionsForFinality, "Unable to notarise spend")
+        logger.info("Finalising transaction for: ${fullySignedTx.id}")
+        val notarisedTx = finaliseTx(fullySignedTx, listOf(recipientSession), "Unable to notarise spend")
         logger.info("Finalised transaction for: ${notarisedTx.id}")
         return Result(notarisedTx, recipient)
     }

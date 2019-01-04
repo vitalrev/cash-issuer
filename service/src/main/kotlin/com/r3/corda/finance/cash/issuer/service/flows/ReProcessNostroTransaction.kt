@@ -20,6 +20,7 @@ class ReProcessNostroTransaction(val bankAccountState: BankAccountState) : FlowL
 
     @Suspendable
     override fun call() {
+        logger.info("Starting ReProcessNostroTransaction flow...")
         // TODO: this seems to have a bug. New bank account states are added to all nostro txs with missing accounts.
         // The assumption is that we only pull out transactions which have been partially matched. I.e. matched to the
         // issuer's nostro account only.

@@ -13,6 +13,7 @@ import net.corda.core.contracts.InsufficientBalanceException
 import net.corda.core.contracts.Issued
 import net.corda.core.flows.*
 import net.corda.core.transactions.TransactionBuilder
+import net.corda.core.utilities.ProgressTracker
 import net.corda.core.utilities.unwrap
 import net.corda.finance.contracts.asset.Cash
 import net.corda.finance.flows.CashException
@@ -22,15 +23,40 @@ import java.util.*
 
 @InitiatedBy(AbstractRedeemCash::class)
 class RedeemCashHandler(val otherSession: FlowSession) : FlowLogic<Unit>() {
+    companion object {
+        object TX_BUILDING : ProgressTracker.Step("Building a transaction.")
+        object TX_SIGNING : ProgressTracker.Step("Signing a transaction.")
+        object SIGS_GATHERING : ProgressTracker.Step("Gathering a transaction's signatures.") {
+            // Wiring up a child progress tracker allows us to see the
+            // subflow's progress steps in our flow's progress tracker.
+            override fun childProgressTracker() = CollectSignaturesFlow.tracker()
+        }
+
+        object FINALISATION : ProgressTracker.Step("Finalising a transaction.") {
+            override fun childProgressTracker() = FinalityFlow.tracker()
+        }
+
+        fun tracker() = ProgressTracker(
+                TX_BUILDING,
+                TX_SIGNING,
+                SIGS_GATHERING,
+                FINALISATION
+        )
+    }
+
+    override val progressTracker: ProgressTracker = tracker()
+
     @Suspendable
     override fun call() {
-        logger.info("Starting redeem handler flow.")
+        logger.info("Starting redeem handler flow...")
         val cashStateAndRefsToRedeem = subFlow(ReceiveStateAndRefFlow<Cash.State>(otherSession))
         val redemptionAmount = otherSession.receive<Amount<Issued<Currency>>>().unwrap { it }
         logger.info("Received cash states to redeem.")
         logger.info("redemptionAmount: $redemptionAmount")
         // Add create a node transaction state by adding the linearIds of all teh bank account states
         val amount = cashStateAndRefsToRedeem.map { it.state.data }.sumCash()
+
+        progressTracker.currentStep = TX_BUILDING
         val notary = serviceHub.networkMapCache.notaryIdentities.first()
         val transactionBuilder = TransactionBuilder(notary = notary)
         val signers = try {
@@ -59,8 +85,14 @@ class RedeemCashHandler(val otherSession: FlowSession) : FlowLogic<Unit>() {
         ledgerTx.inputStates.forEach { logger.info((it as Cash.State).toString()) }
         transactionBuilder.addOutputState(nodeTransactionState, NodeTransactionContract.CONTRACT_ID)
         logger.info(transactionBuilder.toWireTransaction(serviceHub).toString())
+
+        progressTracker.currentStep = TX_SIGNING
         val partiallySignedTransaction = serviceHub.signInitialTransaction(transactionBuilder, serviceHub.keyManagementService.filterMyKeys(signers))
-        val signedTransaction = subFlow(CollectSignaturesFlow(partiallySignedTransaction, listOf(otherSession)))
-        subFlow(FinalityFlow(signedTransaction, listOf(otherSession)))
+
+        progressTracker.currentStep = SIGS_GATHERING
+        val fullySignedTx = subFlow(CollectSignaturesFlow(partiallySignedTransaction, listOf(otherSession), SIGS_GATHERING.childProgressTracker()))
+
+        progressTracker.currentStep = FINALISATION
+        subFlow(FinalityFlow(fullySignedTx, listOf(otherSession), FINALISATION.childProgressTracker()))
     }
 }
