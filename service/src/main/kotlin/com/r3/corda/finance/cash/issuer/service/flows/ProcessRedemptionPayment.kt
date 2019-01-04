@@ -5,7 +5,7 @@ import com.r3.corda.finance.cash.issuer.common.contracts.NodeTransactionContract
 import com.r3.corda.finance.cash.issuer.common.states.BankAccountState
 import com.r3.corda.finance.cash.issuer.common.states.NostroTransactionState
 import com.r3.corda.finance.cash.issuer.common.types.NodeTransactionStatus
-import com.r3.corda.finance.cash.issuer.common.utilities.getPendingRedemptionByNotes
+import com.r3.corda.finance.cash.issuer.common.utilities.getPendingRedemptionByCounterpartyAndNotes
 import net.corda.core.flows.FinalityFlow
 import net.corda.core.flows.FlowLogic
 import net.corda.core.flows.FlowSession
@@ -42,7 +42,7 @@ class ProcessRedemptionPayment(val signedTransaction: SignedTransaction) : FlowL
         logger.info("Counterparty to redeem to is $counterparty")
         val notes = signedTransaction.tx.outputsOfType<NostroTransactionState>().single().description
         val pendingRedemption = try {
-            getPendingRedemptionByNotes(notes, serviceHub)!!
+            getPendingRedemptionByCounterpartyAndNotes(counterparty.name.toString(), notes, serviceHub)!!
         } catch (e: Throwable) {
             throw IllegalStateException("ERROR!!! Oh no!!! The issuer has made an erroneous redemption payment!")
         }

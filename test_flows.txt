@@ -6,7 +6,7 @@ flow start AddBankAccount bankAccount: { accountId: "12345", accountName: "Roger
 run vaultQuery contractStateType: com.r3.corda.finance.cash.issuer.common.states.BankAccountState
 
 // Verify bank account
-flow start VerifyBankAccount linearId: 4db19493-be3f-4c8d-ad31-0085ab3b54a9
+flow start VerifyBankAccount linearId: fd499b39-e786-474c-acc7-2a4087cc1ba2
 
 //check Cash
 run vaultQuery contractStateType: net.corda.finance.contracts.asset.Cash$State
@@ -14,8 +14,11 @@ run vaultQuery contractStateType: net.corda.finance.contracts.asset.Cash$State
 //Redeem Cash
 flow start RedeemCash issuer: Issuer, amount: { quantity: 1000, displayTokenSize: 0.01, token: "GBP" }
 
+flow start AddNostroTransactions newNostroTransactions: [{transactionId: "1234", accountId: "acc_00009RE1DzwEupfetgm84f", amount: -1000, currency: "GBP", type: "payport_faster_payments", description: "3876824809", createdAt: "2019-01-04T14:47:03.854Z", source: { sortCode: "040004" , accountNumber: "97784499", type: "uk" }, destination: { sortCode: "442200" , accountNumber: "13371337", type: "uk" }}]
 
 // Add second bank account for David (see mock data)
 flow start AddBankAccount bankAccount: { accountId: "54321", accountName: "David's Account", accountNumber: { sortCode: "873456" , accountNumber: "12345678", type: "uk" }, currency: "GBP" }, verifier: Issuer
 
 run vaultQuery contractStateType: com.r3.corda.finance.cash.issuer.common.states.NostroTransactionState
+
+flow start MoveCash recipient: PartyB, amount: { quantity: 1000, displayTokenSize: 0.01, token: "GBP" }

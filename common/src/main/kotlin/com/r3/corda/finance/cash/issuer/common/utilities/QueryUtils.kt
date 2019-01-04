@@ -56,8 +56,21 @@ fun getPendingRedemptionsByCounterparty(counterparty: String, services: ServiceH
 
 fun getPendingRedemptionByNotes(notes: String, services: ServiceHub): StateAndRef<NodeTransactionState>? {
     val states = getState<NodeTransactionState>(services) { generalCriteria ->
-        val additionalCriteria = QueryCriteria.VaultCustomQueryCriteria(NodeTransactionStateSchemaV1.PersistentNodeTransactionState::notes.equal(notes))
-        generalCriteria.and(additionalCriteria)
+        val additionalCriteria = QueryCriteria.VaultCustomQueryCriteria(NodeTransactionStateSchemaV1.PersistentNodeTransactionState::status.equal(NodeTransactionStatus.PENDING.name))
+        val additionalCriteriaTwo = QueryCriteria.VaultCustomQueryCriteria(NodeTransactionStateSchemaV1.PersistentNodeTransactionState::type.equal(NodeTransactionType.REDEMPTION.name))
+        val additionalCriteriaThree = QueryCriteria.VaultCustomQueryCriteria(NodeTransactionStateSchemaV1.PersistentNodeTransactionState::notes.equal(notes))
+        generalCriteria.and(additionalCriteria.and(additionalCriteriaTwo.and(additionalCriteriaThree)))
+    }
+    return states.singleOrNull()
+}
+
+fun getPendingRedemptionByCounterpartyAndNotes(counterparty: String, notes: String, services: ServiceHub): StateAndRef<NodeTransactionState>? {
+    val states = getState<NodeTransactionState>(services) { generalCriteria ->
+        val additionalCriteria = QueryCriteria.VaultCustomQueryCriteria(NodeTransactionStateSchemaV1.PersistentNodeTransactionState::status.equal(NodeTransactionStatus.PENDING.name))
+        val additionalCriteriaTwo = QueryCriteria.VaultCustomQueryCriteria(NodeTransactionStateSchemaV1.PersistentNodeTransactionState::type.equal(NodeTransactionType.REDEMPTION.name))
+        val additionalCriteriaThree = QueryCriteria.VaultCustomQueryCriteria(NodeTransactionStateSchemaV1.PersistentNodeTransactionState::counterparty.equal(counterparty))
+        val additionalCriteriaFour = QueryCriteria.VaultCustomQueryCriteria(NodeTransactionStateSchemaV1.PersistentNodeTransactionState::notes.equal(notes))
+        generalCriteria.and(additionalCriteria.and(additionalCriteriaTwo.and(additionalCriteriaThree.and(additionalCriteriaFour))))
     }
     return states.singleOrNull()
 }
