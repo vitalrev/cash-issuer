@@ -2,7 +2,7 @@ package com.r3.corda.finance.cash.issuer.service.flows
 
 import co.paralleluniverse.fibers.Suspendable
 import com.r3.corda.finance.cash.issuer.common.contracts.BankAccountContract
-import com.r3.corda.finance.cash.issuer.common.flows.VerifyBankAccountFlow
+import com.r3.corda.finance.cash.issuer.common.flows.AbstractVerifyBankAccount
 import com.r3.corda.finance.cash.issuer.common.utilities.getBankAccountStateByLinearId
 import net.corda.core.contracts.Command
 import net.corda.core.contracts.UniqueIdentifier
@@ -19,7 +19,7 @@ import net.corda.core.transactions.TransactionBuilder
  */
 @StartableByService
 @StartableByRPC
-class VerifyBankAccount(val linearId: UniqueIdentifier) : VerifyBankAccountFlow.AbstractVerifyBankAccount() {
+class VerifyBankAccount(val linearId: UniqueIdentifier) : AbstractVerifyBankAccount() {
 
     @Suspendable
     override fun call(): SignedTransaction {

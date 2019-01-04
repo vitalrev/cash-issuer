@@ -5,4 +5,4 @@ import net.corda.core.flows.InitiatingFlow
 import net.corda.core.transactions.SignedTransaction
 
 @InitiatingFlow
-abstract class AbstractRedeemCash : FlowLogic<SignedTransaction>()
+abstract class AbstractVerifyBankAccount : FlowLogic<SignedTransaction>()

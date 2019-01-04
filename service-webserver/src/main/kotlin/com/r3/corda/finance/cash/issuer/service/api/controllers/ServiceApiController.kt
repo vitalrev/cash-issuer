@@ -1,7 +1,7 @@
 package com.r3.corda.finance.cash.issuer.service.api.controllers
 
 import com.google.gson.Gson
-import com.r3.corda.finance.cash.issuer.common.flows.AddBankAccountFlow.AddBankAccount
+import com.r3.corda.finance.cash.issuer.common.flows.AddBankAccount
 import com.r3.corda.finance.cash.issuer.common.states.BankAccountState
 import com.r3.corda.finance.cash.issuer.common.states.NodeTransactionState
 import com.r3.corda.finance.cash.issuer.common.states.NostroTransactionState

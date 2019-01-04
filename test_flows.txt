@@ -5,6 +5,9 @@ flow start AddBankAccount bankAccount: { accountId: "12345", accountName: "Roger
 // get linear ID of the bank account state which has just been added
 run vaultQuery contractStateType: com.r3.corda.finance.cash.issuer.common.states.BankAccountState
 
+// Verify bank account
+flow start VerifyBankAccount linearId: 4db19493-be3f-4c8d-ad31-0085ab3b54a9
+
 //check Cash
 run vaultQuery contractStateType: net.corda.finance.contracts.asset.Cash$State
 

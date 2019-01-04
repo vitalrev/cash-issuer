@@ -12,7 +12,6 @@ import net.corda.core.contracts.AmountTransfer
 import net.corda.core.contracts.InsufficientBalanceException
 import net.corda.core.contracts.Issued
 import net.corda.core.flows.*
-import net.corda.core.transactions.SignedTransaction
 import net.corda.core.transactions.TransactionBuilder
 import net.corda.core.utilities.unwrap
 import net.corda.finance.contracts.asset.Cash
@@ -22,9 +21,9 @@ import java.time.Instant
 import java.util.*
 
 @InitiatedBy(AbstractRedeemCash::class)
-class RedeemCashHandler(val otherSession: FlowSession) : FlowLogic<SignedTransaction>() {
+class RedeemCashHandler(val otherSession: FlowSession) : FlowLogic<Unit>() {
     @Suspendable
-    override fun call(): SignedTransaction {
+    override fun call() {
         logger.info("Starting redeem handler flow.")
         val cashStateAndRefsToRedeem = subFlow(ReceiveStateAndRefFlow<Cash.State>(otherSession))
         val redemptionAmount = otherSession.receive<Amount<Issued<Currency>>>().unwrap { it }
@@ -62,6 +61,6 @@ class RedeemCashHandler(val otherSession: FlowSession) : FlowLogic<SignedTransac
         logger.info(transactionBuilder.toWireTransaction(serviceHub).toString())
         val partiallySignedTransaction = serviceHub.signInitialTransaction(transactionBuilder, serviceHub.keyManagementService.filterMyKeys(signers))
         val signedTransaction = subFlow(CollectSignaturesFlow(partiallySignedTransaction, listOf(otherSession)))
-        return subFlow(FinalityFlow(signedTransaction, listOf(otherSession)))
+        subFlow(FinalityFlow(signedTransaction, listOf(otherSession)))
     }
 }

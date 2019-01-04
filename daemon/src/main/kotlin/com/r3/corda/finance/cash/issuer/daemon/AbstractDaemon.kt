@@ -1,6 +1,6 @@
 package com.r3.corda.finance.cash.issuer.daemon
 
-import com.r3.corda.finance.cash.issuer.common.flows.AddBankAccountFlow
+import com.r3.corda.finance.cash.issuer.common.flows.AddBankAccount
 import com.r3.corda.finance.cash.issuer.common.types.UKAccountNumber
 import com.r3.corda.finance.cash.issuer.service.flows.GetLastUpdatesByAccountId
 import com.r3.corda.finance.cash.issuer.service.flows.GetNostroAccountBalances
@@ -74,7 +74,7 @@ abstract class AbstractDaemon(val services: CordaRPCOps, val cmdLineOptions: Com
         allAccounts.forEach {
             val accountNumber = it.accountNumber as UKAccountNumber
             try {
-                services.startFlowDynamic(AddBankAccountFlow.AddBankAccount::class.java, it, services.nodeInfo().legalIdentities.first()).returnValue.getOrThrow()
+                services.startFlowDynamic(AddBankAccount::class.java, it, services.nodeInfo().legalIdentities.first()).returnValue.getOrThrow()
                 println("\t* Added bank account with $accountNumber.")
             } catch (e: CordaRuntimeException) {
                 println("\t* Bank account with $accountNumber has already been added.")

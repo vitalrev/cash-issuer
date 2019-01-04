@@ -11,7 +11,6 @@ import net.corda.core.transactions.TransactionBuilder
 import net.corda.core.utilities.OpaqueBytes
 import net.corda.core.utilities.ProgressTracker
 import net.corda.finance.contracts.asset.AbstractCashSelection
-
 import net.corda.finance.issuedBy
 import java.util.*
 
@@ -28,7 +27,7 @@ class RedeemCash(val amount: Amount<Currency>, val issuer: Party) : AbstractRede
     override val progressTracker: ProgressTracker = tracker()
 
     @Suspendable
-    override fun call() {
+    override fun call(): SignedTransaction {
         val builder = TransactionBuilder(notary = null)
         //get unconsumed cash states
         val exitStates = AbstractCashSelection
@@ -49,6 +48,6 @@ class RedeemCash(val amount: Amount<Currency>, val issuer: Party) : AbstractRede
             override fun checkTransaction(stx: SignedTransaction) = Unit
         })
 
-        subFlow(ReceiveFinalityFlow(otherSession))
+        return subFlow(ReceiveFinalityFlow(otherSession))
     }
 }
