@@ -22,7 +22,7 @@ interface MockClient {
 val mockMonzoAccount = BankAccount(
         accountId = "acc_00009RE1DzwEupfetgm84f",
         accountName = "R3 Ltd",
-        accountNumber = UKAccountNumber("97784499", "040004"),
+        accountNumber = UKAccountNumber("040004", "97784499"),
         currency = GBP
 )
 
