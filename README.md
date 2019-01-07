@@ -40,6 +40,8 @@ The repo is split into a number of modules:
    states
 5. **service-ui** - a basic JavaFx app that provides a view on the cash issuer
    node.
+6. **service-webserver** - the spring boot web server implements RESTfull 
+   and websockets APIs for the issuer node
 
 ## Requirements
 
@@ -121,21 +123,26 @@ Start the corda nodes and issuer daemon:
    `main` function in `com/r3/corda/finance/cash/issuer/Main.kt`. The app
    is defaulted to connect to the Issuer node on port 10006. This can be
    changed in `Main.kt` if required.
+9. Optional you can start the service-webserver (RESTfull and web sockets API) for the Issuer)
+   `./gradlew runIssuerServer` to interact with issuer node.
+   RESTfull API is available under http://localhost:10015/api and swagger UI under http://localhost:10015
+   Web Sockets test driver `com.r3.corda.finance.cash.issuer.service.api.WebSocketTest.kt` can be started via IntelliJ via Green Arrow.
+   
 
 At this point all the required processes are up and running. Next, you can
 perform a demo run of an issuance:
 
-1. From `PartyA` add a new bank account via the node shell: `flow start Add bankAccount: { accountId: 12345, accountName: Rogers Account, accountNumber: { sortCode: “XXXXXX”, accountNumber: YYYYYYYY, type: uk }, currency: GBP }`
-   replacing `XXXXXX` and `YYYYYYYY` with your sort code and account number.
+1. From `PartyA` add a new bank account via the node shell (e.g. vor mock-mode): `flow start AddBankAccount bankAccount: { accountId: "12345", accountName: "Roger's Account", accountNumber: { sortCode: "442200" , accountNumber: "13371337", type: "uk" }, currency: "GBP" }, verifier: Issuer`
+   replacing account data with yours.
    This is the bank account that you will make a payment from, to the issuer's
    account.
-2. Next, we need to send the bank account you have just added, to the
+2. Next, we need to verify the bank account you have just added, by the
    issuer node. First, we need to know the linear ID of the bank account
    state which has just been added: `run vaultQuery contractStateType: com.r3.corda.finance.cash.issuer.common.states.BankAccountState`.
    You should see the linear ID in the data structure which is output to the shell.
-   Send the account to the issuer with `start Send issuer: Issuer, linearId: LINEAR_ID`.
+   Verify the account by the issuer node with `start VerifyBankAccount linearId: LINEAR_ID`.
 3. You should see the issuer's UI update with new bank account information.
-    Note: the issuer's account should already be added.
+    Note: the issuer's account should already be added and verified.
 4. From the issuer daemon shell type `start`. The daemon should start
     polling for new transactions.
 5. Make a payment (for a small amount!!) from `PartyA`s bank account to
