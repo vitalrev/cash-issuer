@@ -69,6 +69,7 @@ dependencies {
 
 	cordapp project(":common")
 	cordapp project(":service")
+	cordapp project(":client")
 }
 
 bootJar {
