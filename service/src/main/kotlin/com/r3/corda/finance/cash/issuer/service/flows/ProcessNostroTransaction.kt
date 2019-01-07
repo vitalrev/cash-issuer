@@ -115,11 +115,12 @@ class ProcessNostroTransaction(val stateAndRef: StateAndRef<NostroTransactionSta
 
         // Get StateAndRefs for the bank account data. We discard the nulls. This will contain either 0, 1 or 2 bank
         // account state refs. If there's three or more then we have a dupe and this should never happen.
+        // Only verified bank accounts can be matched!
         val bankAccountStateRefs = listOf(amountTransfer.source, amountTransfer.destination).map { accountNumber ->
             if (accountNumber !is NoAccountNumber) {
                 getBankAccountStateByAccountNumber(accountNumber, serviceHub)
             } else null
-        }.filterNotNull()
+        }.filterNotNull().filter { it.state.data.verified }
 
         progressTracker.currentStep = GENERATING_TX
         // Set up our transaction builder.
@@ -174,7 +175,6 @@ class ProcessNostroTransaction(val stateAndRef: StateAndRef<NostroTransactionSta
             isIssuance -> {
                 updateNostroTransaction(builder, NostroTransactionType.ISSUANCE, NostroTransactionStatus.MATCHED)
                 addNodeTransactionState(builder, bankAccountStateRefs, nostroTransaction, isRedemption)
-                // TODO: Check that accounts are verified.
                 logger.info("This is an issuance!")
             }
             isRedemption -> {

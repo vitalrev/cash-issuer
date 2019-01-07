@@ -51,7 +51,8 @@ class UpdateObserverService(val services: AppServiceHub) : SingletonSerializeAsT
                     addBankAccountAction(signedTransaction)
                 }
                 isUpdateBankAccount -> {
-                    logger.info("Just updated a BankAccountState. Don't need to do anything.")
+                    logger.info("Bank account updated.")
+                    updateBankAccountAction(signedTransaction)
                 }
                 isAddNostroTransaction -> {
                     logger.info("Processing a newly added nostro transaction...")
@@ -71,20 +72,31 @@ class UpdateObserverService(val services: AppServiceHub) : SingletonSerializeAsT
     }
 
     /**
-     * We are the issuer, all our bank accounts should be verified - they are ours!
+     * a new bank account was added
      */
     private fun addBankAccountAction(signedTransaction: SignedTransaction) {
         val bankAccountState = signedTransaction.tx.outputStates.single() as BankAccountState
         if (bankAccountState.owner == services.myInfo.legalIdentities.single()) {
+            //We are the issuer, all our bank accounts should be verified - they are ours!
             logger.info("The issuer has just added an account. It can be immediately verified.")
             val transaction = signedTransaction.tx
             val linearId = transaction.outRefsOfType<BankAccountState>().single().state.data.linearId
             services.startFlow(VerifyBankAccount(linearId))
-            // TODO We probably need to reprocess here as well...
         } else {
-            logger.info("We've received an account from another node.")
-            //TODO probably reprocess after verification...
+            logger.info("We've received an account from another node. Do nothing, the bank account must be manually verified.")
+        }
+    }
+
+    /**
+     * a bank account was updated (verified)
+     */
+    private fun updateBankAccountAction(signedTransaction: SignedTransaction) {
+        val bankAccountState = signedTransaction.tx.outputStates.single() as BankAccountState
+        if (bankAccountState.verified) {
+            logger.info("The bank account was verified, reprocess the unmatched nostro transactions.")
             services.startFlow(ReProcessNostroTransaction(bankAccountState))
+        } else {
+            logger.info("The bank account was updated, but it was't verified, do nothing.")
         }
     }
 
