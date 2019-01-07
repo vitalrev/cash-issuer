@@ -125,7 +125,7 @@ Start the corda nodes and issuer daemon:
    changed in `Main.kt` if required.
 9. Optional you can start the service-webserver (RESTfull and web sockets API) for the Issuer)
    `./gradlew runIssuerServer` to interact with issuer node.
-   RESTfull API is available under http://localhost:10015/api and swagger UI under http://localhost:10015
+   RESTfull API is available under http://localhost:10015/api and swagger UI under http://localhost:10015/swagger-ui.html
    Web Sockets test driver `com.r3.corda.finance.cash.issuer.service.api.WebSocketTest.kt` can be started via IntelliJ via Green Arrow.
    
 
