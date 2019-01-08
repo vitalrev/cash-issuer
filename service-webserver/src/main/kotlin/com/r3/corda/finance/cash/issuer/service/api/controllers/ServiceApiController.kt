@@ -41,7 +41,8 @@ import java.util.*
 val SERVICE_NAMES = listOf("Notary", "Network Map Service")
 
 // This API is accessible from /api. All paths specified below are relative to it.
-@RequestMapping(value= ["/api/service"]) // The paths for GET and POST requests are relative to this base path.
+@RestController
+@RequestMapping("/api") // The paths for GET and POST requests are relative to this base path.
 class ServiceApiController(
         private val rpc: NodeRPCConnection,
         private val template: SimpMessagingTemplate) {

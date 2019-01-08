@@ -1,23 +1,16 @@
-package com.r3.corda.finance.cash.issuer.service.api.controllers
+package com.r3.corda.finance.cash.issuer.client.api.controllers
 
-import com.google.gson.Gson
 import com.r3.corda.finance.cash.issuer.client.flows.RedeemCash
 import com.r3.corda.finance.cash.issuer.common.flows.AddBankAccountFlow.AddBankAccount
 import com.r3.corda.finance.cash.issuer.common.flows.MoveCash
 import com.r3.corda.finance.cash.issuer.common.states.BankAccountState
-import com.r3.corda.finance.cash.issuer.common.states.NodeTransactionState
-import com.r3.corda.finance.cash.issuer.common.states.NostroTransactionState
 import com.r3.corda.finance.cash.issuer.common.types.BankAccount
-import com.r3.corda.finance.cash.issuer.service.api.model.CashUIModel
-import com.r3.corda.finance.cash.issuer.service.api.model.NodeTransactionUiModel
-import com.r3.corda.finance.cash.issuer.service.api.model.NostroTransactionUiModel
-import com.r3.corda.finance.cash.issuer.service.api.model.toUiModel
-import com.r3.corda.finance.cash.issuer.service.flows.GetNostroAccountBalances
-import com.r3.corda.finance.cash.issuer.service.helpers.getBigDecimalFromLong
+import com.r3.corda.finance.cash.issuer.client.api.model.CashUIModel
+import com.r3.corda.finance.cash.issuer.client.api.model.toUiModel
+import com.r3.corda.finance.cash.issuer.client.helpers.getBigDecimalFromLong
 import net.corda.core.contracts.Amount
 import net.corda.core.identity.CordaX500Name
 import net.corda.core.identity.Party
-import net.corda.core.messaging.startFlow
 import net.corda.core.messaging.startTrackedFlow
 import net.corda.core.messaging.vaultQueryBy
 import net.corda.core.node.services.IdentityService
@@ -41,7 +34,7 @@ val CLIENT_NAMES = listOf("Notary", "Network Map Service")
 
 // This API is accessible from /api. All paths specified below are relative to it.
 @RestController
-@RequestMapping(value= ["/api/client"]) // The paths for GET and POST requests are relative to this base path.
+@RequestMapping(value= ["/api"]) // The paths for GET and POST requests are relative to this base path.
 class ClientApiController(
         private val rpc: NodeRPCConnection,
         private val template: SimpMessagingTemplate) {
@@ -50,7 +43,7 @@ class ClientApiController(
     private val myLegalName: CordaX500Name = proxy.nodeInfo().legalIdentities.first().name
 
     companion object {
-        private val logger: Logger = loggerFor<ServiceApiController>()
+        private val logger: Logger = loggerFor<ClientApiController>()
     }
 
     /**
@@ -69,7 +62,7 @@ class ClientApiController(
         return mapOf("peers" to nodeInfo
                 .map { it.legalIdentities.first().name }
                 //filter out myself, notary and eventual network map started by driver
-                .filter { it.organisation !in (SERVICE_NAMES + myLegalName.organisation) })
+                .filter { it.organisation !in (CLIENT_NAMES + myLegalName.organisation) })
     }
 
     /**
@@ -78,24 +71,6 @@ class ClientApiController(
      */
     @GetMapping("/bank-accounts")
     fun getBankAccounts() = proxy.vaultQueryBy<BankAccountState>().states.map { it.state.data.toUiModel() }
-
-    /**
-     * Returns all nostro transactions.
-     * Accessible at /api/nostro-transactions
-     */
-    @GetMapping( "/nostro-transactions")
-    fun getNostroTransactions() : List<NostroTransactionUiModel> {
-        return proxy.vaultQueryBy<NostroTransactionState>().states.map { it.state.data.toUiModel() }
-    }
-
-    /**
-     * Returns all node transactions.
-     * Accessible at /api/node-transactions
-     */
-    @GetMapping("/node-transactions")
-    fun getNNodeTransactions() : List<NodeTransactionUiModel> {
-        return proxy.vaultQueryBy<NodeTransactionState>().states.map { it.state.data.toUiModel() }
-    }
 
     /**
      * Returns current unspented cash.
@@ -126,17 +101,6 @@ class ClientApiController(
         val resultMap = mutableMapOf<String, BigDecimal>()
         cashBalances.map { (k,v) -> resultMap.put(k.toString(), getBigDecimalFromLong(v.quantity)) }
         return resultMap
-    }
-
-    @GetMapping("/nostro-balances")
-    fun getNostroAccountBalances(): ResponseEntity<Map<String, Long>> {
-        return try {
-            val balances = proxy.startFlow(::GetNostroAccountBalances).returnValue.getOrThrow()
-            ResponseEntity.ok(balances)
-        } catch (ex: Throwable) {
-            logger.error(ex.message, ex)
-            ResponseEntity.badRequest().eTag(ex.message!!).build()
-        }
     }
 
     /**
